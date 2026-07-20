@@ -121,7 +121,7 @@ function processDraw(dateStr) {
     db.updateTicket(t);
   }
   const jackpotWon = winners.some((w) => w.matches === 6);
- const newJackpot = JACKPOT_BASE;
+  const newJackpot = JACKPOT_BASE;
   db.setJackpot(newJackpot);
   db.saveDraw({
     date: dateStr,
