@@ -5,12 +5,21 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, "data", "db.json");
 
 function load() {
   if (!fs.existsSync(DB_PATH)) {
-    const initial = { users: {}, ticketsByDate: {}, draws: {}, jackpot: 1000, salesDates: [] };
+    const initial = {
+      users: {},
+      ticketsByDate: {},
+      draws: {},
+      jackpot: 1000,
+      salesDates: [],
+      topupRequests: [],
+    };
     fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
     fs.writeFileSync(DB_PATH, JSON.stringify(initial, null, 2));
     return initial;
   }
-  return JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+  const state = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+  if (!state.topupRequests) state.topupRequests = [];
+  return state;
 }
 
 let state = load();
@@ -82,5 +91,32 @@ module.exports = {
   addJackpot(delta) {
     state.jackpot += delta;
     save();
+  },
+
+  addTopupRequest(reqObj) {
+    state.topupRequests.push(reqObj);
+    save();
+  },
+  getUserTopupRequests(username) {
+    return state.topupRequests
+      .filter((r) => r.username === username)
+      .sort((a, b) => b.createdAt - a.createdAt);
+  },
+  getPendingTopupRequests() {
+    return state.topupRequests
+      .filter((r) => r.status === "pending")
+      .sort((a, b) => a.createdAt - b.createdAt);
+  },
+  getTopupRequest(id) {
+    return state.topupRequests.find((r) => r.id === id) || null;
+  },
+  updateTopupRequest(id, updates) {
+    const idx = state.topupRequests.findIndex((r) => r.id === id);
+    if (idx >= 0) {
+      state.topupRequests[idx] = { ...state.topupRequests[idx], ...updates };
+      save();
+      return state.topupRequests[idx];
+    }
+    return null;
   },
 };
