@@ -220,7 +220,7 @@ app.post("/api/tickets", auth, (req, res) => {
     boughtAt: Date.now(),
   };
   db.addTicket(ticket);
-  db.addJackpot(JACKPOT_CONTRIB);
+  //db.addJackpot(JACKPOT_CONTRIB);
 
   res.json({ ticket, user: publicUser(user) });
 });
