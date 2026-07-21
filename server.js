@@ -25,7 +25,7 @@ if (JWT_SECRET === "CHANGE-ME-BEFORE-DEPLOYING") {
 function hashPassword(password, salt) {
   salt = salt || crypto.randomBytes(16).toString("hex");
   const hash = crypto.scryptSync(password, salt, 64).toString("hex");
-  return `${salt}:${hash}`;
+  return ${salt}:${hash};
 }
 function verifyPassword(password, stored) {
   const [salt, hash] = stored.split(":");
@@ -39,7 +39,7 @@ function signToken(payload) {
     "base64url"
   );
   const sig = crypto.createHmac("sha256", JWT_SECRET).update(body).digest("base64url");
-  return `${body}.${sig}`;
+  return ${body}.${sig};
 }
 function verifyToken(token) {
   if (!token) return null;
@@ -81,7 +81,6 @@ function activeDrawDate(now = new Date()) {
   return d.toISOString().slice(0, 10);
 }
 function drawSixNumbers() {
-  // Cryptographically secure — do NOT switch this to Math.random() or a seeded PRNG in production.
   const pool = Array.from({ length: 49 }, (_, i) => i + 1);
   const picked = [];
   for (let i = 0; i < 6; i++) {
@@ -131,7 +130,7 @@ function processDraw(dateStr) {
     jackpotWon,
     jackpotAmount: jackpotWon ? jackpot : null,
   });
-  console.log(`Draw processed for ${dateStr}:`, winning, `(${tickets.length} tickets, ${winners.length} winners)`);
+  console.log(Draw processed for ${dateStr}:, winning, (${tickets.length} tickets, ${winners.length} winners));
 }
 function processDueDraws() {
   const openDate = activeDrawDate();
@@ -213,19 +212,72 @@ app.post("/api/tickets", auth, (req, res) => {
   db.saveUser(user);
 
   const ticket = {
-    id: `${user.username}-${Date.now()}-${crypto.randomInt(0, 9999)}`,
+    id: ${user.username}-${Date.now()}-${crypto.randomInt(0, 9999)},
     username: user.username,
     numbers: [...numbers].sort((a, b) => a - b),
     date: drawDate,
     boughtAt: Date.now(),
   };
   db.addTicket(ticket);
-  //db.addJackpot(JACKPOT_CONTRIB);
+  // db.addJackpot(JACKPOT_CONTRIB); // jackpot is fixed now, not increased by ticket sales
 
   res.json({ ticket, user: publicUser(user) });
 });
 
-/* ---------------------------- admin ---------------------------- */
+/* ---------------------------- top-up requests ---------------------------- */
+app.post("/api/topup/request", auth, (req, res) => {
+  const user = db.getUser(req.username);
+  if (!user) return res.status(404).json({ error: "Not found" });
+  const amount = parseInt((req.body || {}).amount, 10);
+  if (!amount || amount <= 0) return res.status(400).json({ error: "Enter a valid amount." });
+  const request = {
+    id: ${user.username}-${Date.now()}-${crypto.randomInt(0, 9999)},
+    username: user.username,
+    amount,
+    status: "pending",
+    createdAt: Date.now(),
+  };
+  db.addTopupRequest(request);
+  res.json({ request });
+});
+
+app.get("/api/topup/mine", auth, (req, res) => {
+  res.json({ requests: db.getUserTopupRequests(req.username) });
+});
+
+app.get("/api/admin/topup-requests", auth, adminOnly, (req, res) => {
+  res.json({ requests: db.getPendingTopupRequests() });
+});
+
+app.post("/api/admin/topup/:id/approve", auth, adminOnly, (req, res) => {
+  const request = db.getTopupRequest(req.params.id);
+  if (!request) return res.status(404).json({ error: "Request not found" });
+  if (request.status !== "pending") return res.status(400).json({ error: "Request already handled" });
+  const targetUser = db.getUser(request.username);
+  if (!targetUser) return res.status(404).json({ error: "User not found" });
+  targetUser.balance += request.amount;
+  db.saveUser(targetUser);
+  const updated = db.updateTopupRequest(request.id, {
+    status: "approved",
+    resolvedAt: Date.now(),
+    resolvedBy: req.username,
+  });
+  res.json({ request: updated });
+});
+
+app.post("/api/admin/topup/:id/reject", auth, adminOnly, (req, res) => {
+  const request = db.getTopupRequest(req.params.id);
+  if (!request) return res.status(404).json({ error: "Request not found" });
+  if (request.status !== "pending") return res.status(400).json({ error: "Request already handled" });
+  const updated = db.updateTopupRequest(request.id, {
+    status: "rejected",
+    resolvedAt: Date.now(),
+    resolvedBy: req.username,
+  });
+  res.json({ request: updated });
+});
+
+/* ---------------------------- admin: users ---------------------------- */
 app.get("/api/admin/pending", auth, adminOnly, (req, res) => {
   res.json({ users: db.getAllUsers().filter((u) => u.role === "pending").map(publicUser) });
 });
@@ -248,11 +300,19 @@ app.post("/api/admin/balance/:username", auth, adminOnly, (req, res) => {
   db.saveUser(u);
   res.json({ user: publicUser(u) });
 });
+app.post("/api/admin/balance/:username/deduct", auth, adminOnly, (req, res) => {
+  const amt = parseInt((req.body || {}).amount, 10);
+  if (!amt || amt <= 0) return res.status(400).json({ error: "Invalid amount" });
+  const u = db.getUser(req.params.username.toLowerCase());
+  if (!u) return res.status(404).json({ error: "Not found" });
+  u.balance = Math.max(0, u.balance - amt);
+  db.saveUser(u);
+  res.json({ user: publicUser(u) });
+});
 
 /* ---------------------------- draw scheduling ---------------------------- */
-// Safety-net check every 5 minutes catches the daily draw even if the process restarted near DRAW_HOUR_UTC.
 cron.schedule("*/5 * * * *", processDueDraws);
 processDueDraws();
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Global Draw server running on port ${PORT}`));
+app.listen(PORT, () => console.log(Global Draw server running on port ${PORT}));
