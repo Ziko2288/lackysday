@@ -143,6 +143,7 @@ function switchTab(tab) {
   document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("hidden", p.id !== "tab-" + tab));
   if (tab === "tickets") loadTickets();
   if (tab === "results") loadDraws();
+  if (tab === "wallet") loadMyTopups();
   if (tab === "admin") loadAdmin();
 }
 
@@ -232,6 +233,41 @@ async function loadTickets() {
   });
 }
 
+/* wallet tab */
+document.getElementById("topupRequestBtn").onclick = async () => {
+  const input = document.getElementById("topupAmountInput");
+  const amount = parseInt(input.value, 10);
+  if (!amount || amount <= 0) return showToast("Enter a valid amount first.", "error");
+  try {
+    await api("/api/topup/request", { method: "POST", body: JSON.stringify({ amount }) });
+    input.value = "";
+    showToast("Top-up request sent. Waiting on admin approval.", "success");
+    loadMyTopups();
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+};
+async function loadMyTopups() {
+  const data = await api("/api/topup/mine");
+  const list = document.getElementById("myTopupList");
+  list.innerHTML = "";
+  if (data.requests.length === 0) {
+    list.innerHTML = '<p class="empty-state">No top-up requests yet.</p>';
+    return;
+  }
+  data.requests.forEach((r) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    let statusHtml;
+    if (r.status === "pending") statusHtml = '<span class="pending-txt">Pending</span>';
+    else if (r.status === "approved") statusHtml = '<span class="won">Approved</span>';
+    else statusHtml = '<span class="lost">Rejected</span>';
+    const date = new Date(r.createdAt).toLocaleString();
+    row.innerHTML = `<div class="date">${date}</div><div class="empty-state">${r.amount.toLocaleString()} coins</div><div>${statusHtml}</div>`;
+    list.appendChild(row);
+  });
+}
+
 /* results tab */
 async function loadDraws() {
   const data = await api("/api/draws");
@@ -255,7 +291,48 @@ async function loadDraws() {
 
 /* admin tab */
 async function loadAdmin() {
-  const [pending, all] = await Promise.all([api("/api/admin/pending"), api("/api/admin/users")]);
+  const [topups, pending, all] = await Promise.all([
+    api("/api/admin/topup-requests"),
+    api("/api/admin/pending"),
+    api("/api/admin/users"),
+  ]);
+
+  const topupList = document.getElementById("topupRequestList");
+  topupList.innerHTML = "";
+  if (topups.requests.length === 0) {
+    topupList.innerHTML = '<p class="empty-state">No pending top-up requests.</p>';
+  } else {
+    topups.requests.forEach((r) => {
+      const row = document.createElement("div");
+      row.className = "row";
+      const date = new Date(r.createdAt).toLocaleString();
+      row.innerHTML = `<div class="date">@${r.username}</div><div class="empty-state">${r.amount.toLocaleString()} coins · ${date}</div>`;
+      const wrap = document.createElement("div");
+      wrap.style.display = "flex";
+      wrap.style.gap = "8px";
+      const approveBtn = document.createElement("button");
+      approveBtn.className = "secondary-btn";
+      approveBtn.textContent = "Approve";
+      approveBtn.onclick = async () => {
+        await api(`/api/admin/topup/${r.id}/approve`, { method: "POST" });
+        showToast("Approved +" + r.amount + " coins for @" + r.username, "success");
+        loadAdmin();
+      };
+      const rejectBtn = document.createElement("button");
+      rejectBtn.className = "secondary-btn";
+      rejectBtn.textContent = "Reject";
+      rejectBtn.onclick = async () => {
+        await api(`/api/admin/topup/${r.id}/reject`, { method: "POST" });
+        showToast("Rejected request from @" + r.username, "success");
+        loadAdmin();
+      };
+      wrap.appendChild(approveBtn);
+      wrap.appendChild(rejectBtn);
+      row.appendChild(wrap);
+      topupList.appendChild(row);
+    });
+  }
+
   const pendingList = document.getElementById("pendingList");
   pendingList.innerHTML = "";
   if (pending.users.length === 0) {
@@ -290,10 +367,10 @@ async function loadAdmin() {
     const input = document.createElement("input");
     input.className = "admin-input";
     input.placeholder = "amount";
-    const btn = document.createElement("button");
-    btn.className = "secondary-btn";
-    btn.textContent = "Add";
-    btn.onclick = async () => {
+    const addBtn = document.createElement("button");
+    addBtn.className = "secondary-btn";
+    addBtn.textContent = "Add";
+    addBtn.onclick = async () => {
       const amount = parseInt(input.value, 10);
       if (!amount || amount <= 0) return showToast("Enter a valid amount first.", "error");
       await api("/api/admin/balance/" + u.username, { method: "POST", body: JSON.stringify({ amount }) });
@@ -302,8 +379,21 @@ async function loadAdmin() {
       loadAdmin();
       if (u.username === state.user.username) refreshMe();
     };
+    const deductBtn = document.createElement("button");
+    deductBtn.className = "secondary-btn";
+    deductBtn.textContent = "Deduct";
+    deductBtn.onclick = async () => {
+      const amount = parseInt(input.value, 10);
+      if (!amount || amount <= 0) return showToast("Enter a valid amount first.", "error");
+      await api("/api/admin/balance/" + u.username + "/deduct", { method: "POST", body: JSON.stringify({ amount }) });
+      showToast(amount + " coins deducted from @" + u.username + ".", "success");
+      input.value = "";
+      loadAdmin();
+      if (u.username === state.user.username) refreshMe();
+    };
     wrap.appendChild(input);
-    wrap.appendChild(btn);
+    wrap.appendChild(addBtn);
+    wrap.appendChild(deductBtn);
     row.appendChild(wrap);
     userList.appendChild(row);
   });
