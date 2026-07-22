@@ -231,7 +231,7 @@ app.post("/api/topup/request", auth, (req, res) => {
   const amount = parseInt((req.body || {}).amount, 10);
   if (!amount || amount <= 0) return res.status(400).json({ error: "Enter a valid amount." });
   const request = {
-    id: ${user.username}-${Date.now()}-${crypto.randomInt(0, 9999)},
+   id: `${user.username}-${Date.now()}-${crypto.randomInt(0, 9999)}`,
     username: user.username,
     amount,
     status: "pending",
