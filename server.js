@@ -212,7 +212,7 @@ app.post("/api/tickets", auth, (req, res) => {
   db.saveUser(user);
 
   const ticket = {
-    id: ${user.username}-${Date.now()}-${crypto.randomInt(0, 9999)},
+    id: `${user.username}-${Date.now()}-${crypto.randomInt(0, 9999)}`,
     username: user.username,
     numbers: [...numbers].sort((a, b) => a - b),
     date: drawDate,
